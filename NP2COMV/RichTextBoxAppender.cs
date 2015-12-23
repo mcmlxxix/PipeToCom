@@ -58,6 +58,7 @@ namespace NP2COMV
             using (var sw = new StringWriter(sb)) 
                 Layout.Format(sw, loggingEvent);
             _richtextBox.AppendText(sb.ToString());
+            _richtextBox.ScrollToCaret();
         }
 
         protected override void Append(log4net.Core.LoggingEvent loggingEvent)

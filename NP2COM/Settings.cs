@@ -2,7 +2,7 @@ using System.IO;
 using System.IO.Ports;
 using System.Xml.Serialization;
 
-namespace NP2COM
+namespace NP2COMV
 {
     public class Settings
     {
