@@ -1,3 +1,12 @@
+/* GUI UPDATE - mcmlxxix */
+
+I took albertjan's COM port to named pipe proxy and modified it
+to use a GUI and handle errors a bit more gracefully. 
+
+Many thanks to him for his efforts.
+
+/* ORIGINAL README */
+
 Hi, 
 
 I've created this little program to be able to have all the 
