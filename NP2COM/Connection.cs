@@ -5,13 +5,11 @@ using System.IO.Ports;
 using System.Text;
 using System.Threading;
 using log4net;
-
+using System.Threading.Tasks;
 
 namespace NP2COMV
 {
     using System.ComponentModel;
-    using System.Runtime.InteropServices;
-    using System.Threading.Tasks;
 
     public class Connection
     {
@@ -20,6 +18,9 @@ namespace NP2COMV
         private Thread portForwarder;
         private AutoResetEvent stopEvent;
         public delegate void ProcessStatus(bool status);
+        private int comReadTimeout = 5;
+        private int pipeReadTimeout = 5;
+        private int waitTimeout = 2000;
 
         #region Logging
 
@@ -99,7 +100,7 @@ namespace NP2COMV
             this.stopEvent.Set();
             // Wait for port forwarder thread to stop
 
-            this.portForwarder.Join(1000);
+            this.portForwarder.Join(5000);
             this.IsStarted = false;
 
             SetStatus(false);
@@ -120,7 +121,7 @@ namespace NP2COMV
         private void PortForwarder()
         {
             Boolean errorsOccurred = false;
-            int namedPipeTimeout = 2000;
+            int namedPipeTimeout = 5000;
 
             try
             {
@@ -141,7 +142,12 @@ namespace NP2COMV
                 errorsOccurred = true;
                 Logger.Error("Ensure that COM port redirector is running with administrator credentials");
             }
-            catch(TimeoutException e)
+            catch (IOException e)
+            {
+                errorsOccurred = true;
+                Logger.Error("Named pipe semaphore timeout");
+            }
+            catch (TimeoutException e)
             {
                 errorsOccurred = true;
                 Logger.Error("Timed out connecting to named pipe");
@@ -157,6 +163,7 @@ namespace NP2COMV
             if (!errorsOccurred)
             {
                 this.SerialProxy();
+                //this.AsyncSerialProxy();
             }
             else
             {
@@ -182,11 +189,22 @@ namespace NP2COMV
                     this.Stop();
                     break;
                 }
-                else if (pipeEvent.WaitOne(25))
+
+                /* read from named pipe and write to serial port */
+                if (pipeEvent.WaitOne(pipeReadTimeout))
                 {
                     NRead(pipeEvent);
                 }
-                else if (serialEvent.WaitOne(25))
+
+                /* if the serial port unexpectedly closes.. don't shit the bed */
+                if (!this.serialPort.IsOpen || !this.namedPipe.IsConnected)
+                {
+                    this.Stop();
+                    break;
+                }
+
+                /* read from serial port and write to named pipe */
+                if (serialEvent.WaitOne(comReadTimeout))
                 {
                     CRead(serialEvent);
 
@@ -199,11 +217,38 @@ namespace NP2COMV
                     stopEvent
                 };
 
-                waitResult = WaitHandle.WaitAny(waitHandle);
+                waitResult = WaitHandle.WaitAny(waitHandle, waitTimeout);
             }
             while (waitResult != 2);
 
         }
+
+        /* NOT YET IMPLEMENTED
+        private async void AsyncSerialProxy()
+        {
+            byte[] serialBuffer = new byte[this.serialPort.ReadBufferSize];
+            byte[] pipeBuffer = new byte[this.serialPort.ReadBufferSize];
+
+            do
+            {
+                if (!this.serialPort.IsOpen || !this.namedPipe.IsConnected)
+                {
+                    this.Stop();
+                    break;
+                }
+
+                await this.serialPort.BaseStream.ReadAsync(serialBuffer, 0, serialBuffer.Length);
+                await this.namedPipe.WriteAsync(serialBuffer, 0, serialBuffer.Length);
+                Logger.Debug("COM-->NP: " + GetLogString(serialBuffer, serialBuffer.Length));
+
+                await this.namedPipe.ReadAsync(pipeBuffer, 0, pipeBuffer.Length);
+                await this.serialPort.BaseStream.WriteAsync(pipeBuffer, 0, pipeBuffer.Length);
+                Logger.Debug("NP-->COM: " + GetLogString(pipeBuffer, pipeBuffer.Length));
+
+            }
+            while (true);
+        }
+        */
 
         private void CRead(ManualResetEvent serialEvent)
         {
@@ -219,7 +264,7 @@ namespace NP2COMV
                     NPWrite(serialEvent, serialBuffer),
                     null);
             }
-            catch(InvalidOperationException)
+            catch (InvalidOperationException)
             {
 
             }
@@ -310,7 +355,7 @@ namespace NP2COMV
                 try
                 {
                     this.serialPort.BaseStream.EndWrite(AsyncResult);
-                    Logger.Debug("COM<--NP: " + GetLogString(pipeBuffer, length));
+                    //Logger.Debug("COM<--NP: " + GetLogString(pipeBuffer, length));
                 }
                 catch (IOException)
                 {
@@ -327,7 +372,7 @@ namespace NP2COMV
                 try
                 {
                     this.namedPipe.EndWrite(AsyncResult);
-                    Logger.Debug("COM-->NP: " + GetLogString(serialBuffer, length));
+                    //Logger.Debug("COM-->NP: " + GetLogString(serialBuffer, length));
                 }
                 catch (IOException)
                 {

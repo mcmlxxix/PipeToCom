@@ -28,6 +28,7 @@ namespace NP2COMV
                 using (var fs =File.OpenRead(fileName))
                     return (Settings)new XmlSerializer(typeof (Settings)).Deserialize(fs);
             }
+            //return new Settings();
             throw new FileNotFoundException("Can't find config file", fileName);
         }
     }
